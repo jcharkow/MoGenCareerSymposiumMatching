@@ -1,0 +1,12 @@
+For the first time in career symposium history student-mentor pairings are
+formulated using an automated matching algorithm. This algorithm is student
+centric meaning that the primary goal of the algoirthm is to pair students
+with their highest ranking mentors while ensuring roundtables do not get too
+large as this would impede on the mentoring experience. Students are only
+paried with mentors they have indicated some level of interest for. 
+
+This algorithm takes into account several factors including student preferences,
+student priority (prioritizing students graduating soon) and mentor
+populairty and controls for group sizes. 
+
+For more information please checkout the github page in the QR code below. 
