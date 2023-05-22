@@ -41,8 +41,8 @@ This is a greedy algorithm meaning that once students are matched to a mentor gr
 		3. For Each preference try pairing. Pairing is sucessful if there are less than MAX_PER_GROUP present. Keep going down the list of mentors until a pair is found
 		3. If pairing is still unsucessful rety with the HARD_MAX_PER_GROUP cutoff.	
 
-### **Part C: Update Preferences for next round**
+#### **Part C: Update Preferences for next round**
 1. Remove the preference that the student is paired with to ensure that a student is not paired with the same mentor twice. 
 
-
+#### **General Workflow**
 The overall workflow for 3 roundatable sessions is: A-B1-C1-B2-C2-B3
