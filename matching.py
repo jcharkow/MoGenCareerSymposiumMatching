@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re
 
 
 class Preferences():
@@ -49,9 +50,14 @@ class Preferences():
         if df['Year'] == 'Year 2, planning to graduate with an MSc':
             year = 2
             group = df['Group'] + " (MSc)"
-        else:
-            year = int(df['Year'])
+        
+        elif isinstance(df['Year'], float) and df['Year'] is np.nan:
+            year = 0
             group = df['Group']
+        else:
+            year = int(re.findall(r'\d', df['Year'])[0])
+            group = df['Group']
+            
         
         if group == 'MoGen research graduate student' and year >= 6:
             return 1
@@ -64,22 +70,31 @@ class Preferences():
         elif group=="MoGen MHSc student":
             return 2
         
+        elif group=='Medical Genomics graduate student':
+            return 2
+        
+        
         elif group == "MoGen research graduate student" and year >= 3 and year <= 4: 
             return 3
-        elif group == "postdoc":
+        elif group == "Postdoc":
             return 3
         elif group == "MoGen research graduate student":
             return 4
         elif group == "Mogen MHSc alumna":
             return 4
-        elif group == "trainee at a department other than MoGen":
+        elif group == "Trainee at a department other than MoGen":
+            return 5
+        elif group == 'Trainee at a department other than MoGen (MSc)':
             return 5
         elif group == "MoGen undergraduate student":
+            return 6
+        elif group == "Biochem undergraduate student in a MoGen lab (I wasn't sure which category this was).":
             return 6
         elif group == "Graduating undergraduate student from a non-MoGen program (HMB & CSB)":
             return 6
 
         else:
+            return 6
             raise Exception("group: {}, year: {} not matched".format(group, year))
     
     
@@ -122,11 +137,43 @@ class Preferences():
         e.g. if student ranked at least 1 person 1 return 1
         '''
         return self.getPreference(student).min()
+    
+    def addMentor(self, series):
+        '''
+        Add a mentor to the list of preferences. This is useful if a mentor was not avaliable for a previous round and is to be added to this round
+        
+        Args:
+            series: (pd.Series) a pd Series object which contains the mentor as the name, emails as the index and preferences (in numbers) as the values
+        '''
+        self.df = pd.concat([series, self.df], axis=1)
+    
+    def dropMentor(self, mentor):
+        '''
+        Drop mentor from the list of preferences
+        '''
+        self.df.drop(columns=[mentor], inplace=True)
+    
+    def getNumberMentorsRanked(self):
+        '''
+        Get the number of mentors a student ranks ideally a student should be ranking 4 mentors
+        '''
+        return self.df.sum(axis=1)
+    
+    
+    def removePreferences(self, mentor, students):
+        '''
+        Manually remove preferences of students for a particular mentor. This is useful if preferences can not be removed automatically (e.g. combined in         table and now not combined
+        '''
+        for i in students:
+            try:
+                self.df.loc[i, mentor] = np.nan 
+            except KeyError:
+                print("WARNING: {} not changed".format(i))
         
                   
 class Matching():
     ''' This object performs a round of matching '''
-    def __init__(self, preference, max_per_group=2, hard_max_per_group=10, min_per_group=2, rank_1_pts=10, rank_2_pts=5, rank_3_pts=1, rank_1_description="Strongest Interest", rank_2_description="Strong Interest", rank_3_description="Interested"):
+    def __init__(self, preference, max_per_group=2, hard_max_per_group=10, min_per_group=2, rank_1_pts=10, rank_2_pts=5, rank_3_pts=1, rank_1_description="Strongest Interest", rank_2_description="Strong Interest", rank_3_description="Interested", manual_match_mentor=[]):
         ''' Initialize the object
             Matching --> dictionary of the computed optimal matching
             
@@ -151,8 +198,38 @@ class Matching():
         
         # get mentor popularity
         self.mentor_popularity = self.getMentorPopularity()
-        
         self.matching_performed = False # whether matching has been performed
+        
+        # manual match mentor 
+        self.manual_match_mentor = manual_match_mentor
+        
+    
+    def combineMentors(self, mentor1, mentor2):
+        ''' This combines the mentors into one column '''
+        self.preference[mentor1 + ' ' + mentor2] = self.preference.apply(lambda x: Matching._combineMentorsHelper(x[mentor1], x[mentor2]), axis=1)
+        self.preference = self.preference.drop(columns=[mentor1, mentor2])
+        
+        # also combine their popularity
+        self.mentor_popularity.loc[mentor1 + ' ' + mentor2] = self.mentor_popularity.loc[mentor1] + self.mentor_popularity.loc[mentor2]
+        
+        self.mentor_popularity = self.mentor_popularity.drop([mentor1, mentor2])
+        
+        # add this new group 
+        self.matching[mentor1 + ' ' + mentor2] = []
+        self.matching.pop(mentor1)
+        self.matching.pop(mentor2)
+    
+    @staticmethod
+    def _combineMentorsHelper(choice1, choice2):
+        if choice1 is np.nan:
+            return choice2 
+        elif choice2 is np.nan:
+            return choice1
+        elif choice1 < choice2:
+            return choice1
+        else:
+            return choice2
+        
     
     def getParameters(self):
         ''' This prints the parameters '''
@@ -359,6 +436,9 @@ class Matching():
         return sns.barplot(y='MENTOR_POPULARITY', x='GROUP_SIZE', data=tmp)
         pass
     
+    def manualMatch(self, student_preference):
+        print(student_preference)
+    
     def pair(self, student_preference, max_per_group):
         ''' 
         pairs the participant with a group 
@@ -377,7 +457,11 @@ class Matching():
 
             ## get mentors in order of lowest popularity
             possible_mentors = (self.mentor_popularity.loc[student_preference[student_preference == rank_level].index.values].sort_values(ascending=True).index.values)
-
+            
+            ##### check if we should manually match
+            for i in self.manual_match_mentor:
+                if i in possible_mentors:
+                    return i
                                 
             if (len(possible_mentors) > 1):
                 assert(self.mentor_popularity.loc[possible_mentors[0]] <= self.mentor_popularity.loc[possible_mentors[1]])
@@ -404,6 +488,7 @@ class Matching():
 
             ## if could not pair with initial threshold, then try to pair with more loose threshold
             if needsMatch:
+                
                 ## try pairing with the initial threshold
                 matched_mentor = self.pair(participant_preferences, self.HARD_MAX_PER_GROUP)
                 #print("Second round matched mentor: {}".format(matched_mentor))
