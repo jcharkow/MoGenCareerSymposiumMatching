@@ -55,7 +55,10 @@ class Preferences():
             year = 0
             group = df['Group']
         else:
-            year = int(re.findall(r'\d', df['Year'])[0])
+            try:
+                year = int(re.findall(r'\d', df['Year'])[0])
+            except IndexError: # means that the Year column does not contain a number
+                year = 0
             group = df['Group']
             
         
@@ -157,7 +160,7 @@ class Preferences():
         '''
         Get the number of mentors a student ranks ideally a student should be ranking 4 mentors
         '''
-        return self.df.sum(axis=1)
+        return self.df.count(axis=1)
     
     
     def removePreferences(self, mentor, students):
@@ -173,7 +176,7 @@ class Preferences():
                   
 class Matching():
     ''' This object performs a round of matching '''
-    def __init__(self, preference, max_per_group=2, hard_max_per_group=10, min_per_group=2, rank_1_pts=10, rank_2_pts=5, rank_3_pts=1, rank_1_description="Strongest Interest", rank_2_description="Strong Interest", rank_3_description="Interested", manual_match_mentor=[]):
+    def __init__(self, preference, max_per_group=2, hard_max_per_group=10, medium_max_per_group=5, min_per_group=2, rank_1_pts=10, rank_2_pts=5, rank_3_pts=1, rank_1_description="Strongest Interest", rank_2_description="Strong Interest", rank_3_description="Interested", manual_match_mentor=[]):
         ''' Initialize the object
             Matching --> dictionary of the computed optimal matching
             
@@ -186,6 +189,7 @@ class Matching():
         # matching parameters
         self.MAX_PER_GROUP = max_per_group
         self.HARD_MAX_PER_GROUP = hard_max_per_group
+        self.MEDIUM_MAX_PER_GROUP = medium_max_per_group
         self.MIN_PER_GROUP = min_per_group # give a warning when less than this in a group
         
         # mentor popularity parameters 
@@ -490,12 +494,25 @@ class Matching():
             if needsMatch:
                 
                 ## try pairing with the initial threshold
+                matched_mentor = self.pair(participant_preferences, self.MEDIUM_MAX_PER_GROUP)
+                #print("Second round matched mentor: {}".format(matched_mentor))
+                if matched_mentor is not None:
+                    self.matching[matched_mentor].append(name)
+                    #print("Paired {} with {}!".format(name, matched_mentor))
+                    needsMatch = False
+                    
+            
+            ## if could not pair with initial threshold, then try to pair with more loose threshold
+            if needsMatch:
+                
+                ## try pairing with the initial threshold
                 matched_mentor = self.pair(participant_preferences, self.HARD_MAX_PER_GROUP)
                 #print("Second round matched mentor: {}".format(matched_mentor))
                 if matched_mentor is not None:
                     self.matching[matched_mentor].append(name)
                     #print("Paired {} with {}!".format(name, matched_mentor))
                     needsMatch = False
+                
                 
             # If still could not pair, throw an error with this student
             if needsMatch:
